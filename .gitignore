@@ -1,0 +1,7 @@
+.idea/
+__pycache__/
+venv/
+.DS_Store
+*.pyc
+*.egg-info/
+tests/generated_outputs
