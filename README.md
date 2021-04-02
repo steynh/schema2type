@@ -1,4 +1,7 @@
 # Schema2type
+[![License](https://img.shields.io/badge/License-Apache%202.0-blue.svg)](https://opensource.org/licenses/Apache-2.0)
+[![PyPI](https://img.shields.io/pypi/v/schema2type.svg)](https://pypi.python.org/pypi/schema2type/)
+[![Python version](https://img.shields.io/pypi/pyversions/schema2type.svg)](https://pypi.python.org/pypi/schema2type/)
 
 Schema2type: interact with JSON or YAML content as if it's a Python object.
 How it works:
@@ -50,10 +53,9 @@ parsing your JSON schema or OpenAPI specification. Use at your own risk of runni
 for `oneOf`, `allOf`, and `anyOf` schemas is still limited.
 
 ## How to install
-This module is not on *pypi* yet, so ensure your virtualenv is activated (if using one at all) and then install as follows:
+Schema2type is available from PyPI, and can be installed via pip:
 ```bash
-git clone https://github.com/mokkit/schema2type.git
-pip install schema2type/
+pip install schema2type
 ```
 
 ## Usage
