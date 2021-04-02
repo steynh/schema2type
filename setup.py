@@ -31,7 +31,7 @@ with open("requirements.txt") as requirements_file:
 
 setuptools.setup(
     name="schema2type",
-    version="0.0.1",
+    version="0.0.2",
     author="Steyn Huurman",
     author_email="steyn@mokkit.eu",
     description="Interact with JSON or YAML content as if it's a Python object",
