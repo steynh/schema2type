@@ -5,3 +5,5 @@ venv/
 *.pyc
 *.egg-info/
 tests/generated_outputs
+build/
+dist/
