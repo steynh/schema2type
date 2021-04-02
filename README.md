@@ -3,11 +3,11 @@
 [![PyPI](https://img.shields.io/pypi/v/schema2type.svg)](https://pypi.python.org/pypi/schema2type/)
 [![Python version](https://img.shields.io/pypi/pyversions/schema2type.svg)](https://pypi.python.org/pypi/schema2type/)
 
-Schema2type: interact with JSON or YAML content as if it's a Python object.
+Interact with JSON and YAML content through custom Python classes.
 How it works:
 - You specify the desired or expected format of your content using a [JSON Schema](https://json-schema.org/) or 
   [OpenAPI Specification (version 3)](https://swagger.io/specification/).
-- Schema2type then creates dynamic Python types for all the (sub-)schemas described by that schema/specification.
+- Schema2type creates dynamic Python types for all the (sub-)schemas described by that schema/specification.
 - You can make use of these types from anywhere in your code to interact with the JSON or YAML content.
 - Schema2type also generates so-called [stub files](https://mypy.readthedocs.io/en/stable/stubs.html), 
   which allow you to make use of your IDE's auto-complete functionality for the dynamically created types 
