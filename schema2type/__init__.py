@@ -311,7 +311,10 @@ class OneOfTypeInfoFactory(SchemaBasedTypeInfoFactory):
 class ArrayTypeInfoFactory(SchemaBasedTypeInfoFactory):
     def build_type(self) -> Optional[SchemaBasedTypeInfo]:
         if isinstance(self.schema, dict) and 'type' in self.schema and self.schema['type'] == 'array':
-            sub_type: SchemaBasedTypeInfo = self.build_sub_type(self.schema['items'], required=True)
+            if 'items' in self.schema:
+                sub_type: SchemaBasedTypeInfo = self.build_sub_type(self.schema['items'], required=True)
+            else:
+                sub_type = SchemaBasedTypeInfo(type_str='Any', type_obj=object, constructor=lambda x: x, required=True)
 
             def array_constructor(raw_list):
                 if not isinstance(raw_list, list):
