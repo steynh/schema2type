@@ -56,13 +56,13 @@ def get_relative_path(origin: Union[Path, str], destination: Union[Path, str]):
     return relative_path
 
 
-@main_command.command(help='Just try running this command and see what happens.')
+@main_command.command(help='Generate stub files')
 @click.argument('document_path')
 @click.argument('document_type',
                 type=click.Choice(schema2type.specification_type_to_interface_class.keys()))
-@click.option('-o', '--out', help='Directory for the generated files.', default='./')
-@click.option('-f', '--force', help='Overwrite existing files.', default=False, is_flag=True)
-@click.option('-n', '--name', help='Name of the submodule files.', default=None)
+@click.option('-o', '--out', help='Directory for the generated files', default='./')
+@click.option('-f', '--force', help='Overwrite existing files', default=False, is_flag=True)
+@click.option('-n', '--name', help='Name of the submodule files', default=None)
 def gen_stubs(document_path, document_type, out, force, name):
     out_dir = Path(out)
     document_path = Path(document_path)
@@ -92,7 +92,7 @@ def gen_stubs(document_path, document_type, out, force, name):
     except schema2type.DocumentError as e:
         raise click.ClickException(f'can\'t parse the document at "{document_path}".\n  {e}')
     except Exception as e:
-        raise click.ClickException(f'unexpect exception occurred.\n  {e}\n'
+        raise click.ClickException(f'unexpect exception occurred.\n {type(e)} {e}\n'
                                    f'  please report this at https://github.com/mokkit/schema2type/issues')
 
     path_to_write = stub_file_path
