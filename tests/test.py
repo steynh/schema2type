@@ -19,9 +19,11 @@ from pathlib import Path
 from shutil import rmtree
 
 import prance as prance
+import yaml
 from click.testing import CliRunner
 
 import schema2type.commands
+from schema2type import Reference
 from schema2type.commands.gen_stubs import get_relative_path
 from examples.generated_files.openapi import RootObject as OpenAPISpecification, Schema
 
@@ -100,6 +102,19 @@ class IntegrationTestCase(unittest.TestCase):
             output_name='pet_store',
             document_format='openapi',
         )
+
+
+class ReferencesTestCase(unittest.TestCase):
+    def test_references(self):
+        with open(root_dir.joinpath('examples/pet_store_openapi_spec.yml')) as oas_file:
+            pet_store = OpenAPISpecification(**yaml.safe_load(oas_file))
+        pet_schema_by_ref = pet_store.paths['/pet/{petId}']['get'].responses['200'].content['application/json'].schema
+        self.assertIsInstance(pet_schema_by_ref, Reference)
+        self.assertIsInstance(pet_schema_by_ref.resolve(), Schema)
+        self.assertNotIn('$ref', pet_schema_by_ref)
+        pet_schema_by_list_ref = pet_store.paths['/pet']['put'].requestBody.content['application/json'].schema.oneOf[0]
+        self.assertIsInstance(pet_schema_by_list_ref, Schema)
+        # todo: same should be true for references taken from Dict
 
 
 if __name__ == '__main__':

@@ -40,9 +40,59 @@ def to_simple(original_object: Union[Dict, List, SchemaBasedObject, SimpleType])
         }
     elif isinstance(original_object, list):
         simple_object = [to_simple(value) for value in original_object]
+    elif isinstance(original_object, Reference):
+        simple_object = to_simple(original_object.resolve())
     else:
         simple_object = original_object
     return simple_object
+
+
+class Reference(object):
+    def __init__(self, ref_str: str, type_info: SchemaBasedTypeInfo):
+        self.type_info = type_info
+        self.ref_str = ref_str
+        most_outer_obj = self
+        for outer_obj, _ in iterate_outer_methods():
+            if isinstance(outer_obj, SchemaBasedObject):
+                most_outer_obj = outer_obj
+                break
+        self.most_outer_obj = most_outer_obj
+        self.cache = None
+
+    def resolve(self):
+        if self.cache is None:
+            refs = self.ref_str.split('/')
+            assert refs[0] == '#'
+            level = self.most_outer_obj
+            for ref in refs[1:]:
+                level = level[ref]
+            self.cache = level
+            # self.cache = self.type_info.constructor(level)
+        return self.cache
+
+    def __getitem__(self, item):
+        return self.resolve().__getitem__(item)
+
+    def __getattr__(self, item):
+        return getattr(self.resolve(), item)
+
+    def __iter__(self):
+        return self.resolve().__iter__()
+
+    def __contains__(self, item):
+        return self.resolve().__contains__(item)
+
+
+class SchemaBasedList(list):
+    def __getitem__(self, item):
+        value = super(SchemaBasedList, self).__getitem__(item)
+        if isinstance(value, Reference):
+            return value.resolve()
+        return value
+
+    def __iter__(self):
+        for i in range(len(self)):
+            yield self[i]
 
 
 class SchemaBasedObject(object):
@@ -61,8 +111,12 @@ class SchemaBasedObject(object):
                 property_name = self._legal_property_name_to_original[property_name]
 
             if property_name in self._property_name_to_type:
-                constructor = self._property_name_to_type[property_name].constructor
-                self._properties[property_name] = constructor(property_value)
+                if isinstance(property_value, dict) and '$ref' in property_value:
+                    self._properties[property_name] = Reference(property_value['$ref'],
+                                                                type_info=self._property_name_to_type[property_name])
+                else:
+                    constructor = self._property_name_to_type[property_name].constructor
+                    self._properties[property_name] = constructor(property_value)
             elif self._additional_properties_allowed:
                 if self._additional_properties_type is not None:
                     self._properties[property_name] = self._additional_properties_type.constructor(property_value)
@@ -77,7 +131,7 @@ class SchemaBasedObject(object):
 
     def get_additional_properties(self) -> Dict[str, Any]:
         return {
-            key: value for key, value in self._properties.items() if key not in self._property_name_to_type
+            key: self[key] for key, value in self._properties.items() if key not in self._property_name_to_type
         }
 
     def as_simple_dict(self):
@@ -86,7 +140,11 @@ class SchemaBasedObject(object):
     def __getitem__(self, item):
         if item not in self._properties:
             raise KeyError(f"{self} has no property {item}")
-        return self._properties[item]
+        value = self._properties[item]
+        # if isinstance(value, Reference):
+        #     return value.resolve()
+
+        return value
 
     def __repr__(self):
         required_properties = {
@@ -263,7 +321,7 @@ class CustomTypeInfoFactory(SchemaBasedTypeInfoFactory):
             )
 
             def property_getter(self_: SchemaBasedObject, bound_property_name=property_name):
-                return self_._properties.get(bound_property_name, None)
+                return self_[bound_property_name] if bound_property_name in self_ else None
 
             def property_setter(self_: SchemaBasedObject, value, bound_property_name=property_name):
                 property_type = self_._property_name_to_type[bound_property_name]
@@ -277,6 +335,13 @@ class CustomTypeInfoFactory(SchemaBasedTypeInfoFactory):
 
 class NoValidOneOfOptionException(Exception):
     pass
+
+
+def iterate_outer_methods():
+    import inspect
+    for frame in reversed(inspect.stack()):
+        if 'self' in frame.frame.f_locals:
+            yield frame.frame.f_locals['self'], frame.function
 
 
 class OneOfTypeInfoFactory(SchemaBasedTypeInfoFactory):
@@ -320,7 +385,14 @@ class ArrayTypeInfoFactory(SchemaBasedTypeInfoFactory):
                 if not isinstance(raw_list, list):
                     raise ValueError(f'while converting a list of raw items to a list of typed items,'
                                      f'expected a list of items, got a {str(type(raw_list))}: {str(raw_list)}')
-                return [sub_type.constructor(x) for x in raw_list]
+                new_list = []
+                for raw in raw_list:
+                    if isinstance(raw, dict) and '$ref' in raw:
+                        new_list.append(Reference(raw['$ref'], type_info=sub_type))
+                    else:
+                        new_list.append(sub_type.constructor(raw))
+
+                return SchemaBasedList(new_list)  # [sub_type.constructor(x) for x in raw_list]
 
             return SchemaBasedTypeInfo(type_str=f'List[{sub_type.type_str}]',
                                        type_obj=list,
