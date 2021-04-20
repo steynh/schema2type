@@ -555,6 +555,9 @@ def gen_stub_text(specification_path: str, specification_type: str):
 
     for type_name, dynamic_type_class in sorted(SchemaBasedTypeBuilder(specification_path,
                                                                        specification_type).get_all_types().items()):
+        if isinstance(dynamic_type_class, type) and issubclass(dynamic_type_class, Reference):
+            if type_name != 'Reference':
+                stub_text += f'{type_name} = Reference\n\n'
         if isinstance(dynamic_type_class, type) and issubclass(dynamic_type_class, SchemaBasedObject):
             constructor_parameters = []
             stub_text += f'class {type_name}(SchemaBasedObject):\n'
