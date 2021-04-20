@@ -20,6 +20,7 @@ import keyword
 import re
 import logging
 from abc import abstractmethod, ABC
+from copy import copy
 from typing import Dict, List, Any, Callable, Iterable, Optional, Type, Union
 
 import yaml
@@ -48,8 +49,8 @@ def to_simple(original_object: Union[Dict, List, SchemaBasedObject, SimpleType])
 
 
 class Reference(object):
-    def __init__(self, ref_str: str, type_info: SchemaBasedTypeInfo):
-        self.type_info = type_info
+    def __init__(self, ref_str: str):
+        # todo: check ref_str format
         self.ref_str = ref_str
         most_outer_obj = self
         for outer_obj, _ in iterate_outer_methods():
@@ -65,6 +66,7 @@ class Reference(object):
             assert refs[0] == '#'
             level = self.most_outer_obj
             for ref in refs[1:]:
+                # todo: raise value error if ref unresolvable
                 level = level[ref]
             self.cache = level
             # self.cache = self.type_info.constructor(level)
@@ -83,18 +85,6 @@ class Reference(object):
         return self.resolve().__contains__(item)
 
 
-class SchemaBasedList(list):
-    def __getitem__(self, item):
-        value = super(SchemaBasedList, self).__getitem__(item)
-        if isinstance(value, Reference):
-            return value.resolve()
-        return value
-
-    def __iter__(self):
-        for i in range(len(self)):
-            yield self[i]
-
-
 class SchemaBasedObject(object):
     _property_name_to_type: Dict[str, SchemaBasedTypeInfo]
     _additional_properties_type: Optional[SchemaBasedTypeInfo]
@@ -111,12 +101,8 @@ class SchemaBasedObject(object):
                 property_name = self._legal_property_name_to_original[property_name]
 
             if property_name in self._property_name_to_type:
-                if isinstance(property_value, dict) and '$ref' in property_value:
-                    self._properties[property_name] = Reference(property_value['$ref'],
-                                                                type_info=self._property_name_to_type[property_name])
-                else:
-                    constructor = self._property_name_to_type[property_name].constructor
-                    self._properties[property_name] = constructor(property_value)
+                constructor = self._property_name_to_type[property_name].constructor
+                self._properties[property_name] = constructor(property_value)
             elif self._additional_properties_allowed:
                 if self._additional_properties_type is not None:
                     self._properties[property_name] = self._additional_properties_type.constructor(property_value)
@@ -140,11 +126,7 @@ class SchemaBasedObject(object):
     def __getitem__(self, item):
         if item not in self._properties:
             raise KeyError(f"{self} has no property {item}")
-        value = self._properties[item]
-        # if isinstance(value, Reference):
-        #     return value.resolve()
-
-        return value
+        return self._properties[item]
 
     def __repr__(self):
         required_properties = {
@@ -260,11 +242,24 @@ class RefTypeInfoFactory(SchemaBasedTypeInfoFactory):
             schema_name = self.type_builder.specification_interface.parse_schema_name(ref_string)
             if not self.type_builder.specification_interface.schema_exists(schema_name):
                 raise DocumentError(f'unresolved schema reference: "{ref_string}"')
-            referenced_type_info = self.type_builder.get_type(schema_name)
-            return SchemaBasedTypeInfo(type_str=referenced_type_info.type_str,
-                                       type_obj=referenced_type_info.type_obj,
-                                       constructor=referenced_type_info.constructor,
-                                       required=self.required)
+            referenced_type_info = copy(self.type_builder.get_type(schema_name))
+            referenced_type_info.required = self.required
+            return referenced_type_info
+
+
+class ReferenceSchemaTypeInfoFactory(SchemaBasedTypeInfoFactory):
+    def build_type(self) -> Optional[SchemaBasedTypeInfo]:
+        if 'required' in self.schema and '$ref' in self.schema['required'] and len(self.schema['required']) == 1:
+            def constructor(raw):
+                if not isinstance(raw, dict) or '$ref' not in raw:
+                    raise ValueError('expected a reference object in the shape {"$ref": "#/some/uri"}')
+                return Reference(raw['$ref'])
+            return SchemaBasedTypeInfo(
+                type_str=self.schema_name or 'Reference',
+                type_obj=Reference,
+                required=self.required,
+                constructor=constructor,
+            )
 
 
 # noinspection PyProtectedMember
@@ -352,11 +347,22 @@ class OneOfTypeInfoFactory(SchemaBasedTypeInfoFactory):
 
             type_str = f"Union[{', '.join([option.type_str for option in type_options])}]"
 
+            def options_sort_key(option: SchemaBasedTypeInfo):
+                if issubclass(option.type_obj, Reference):
+                    return 0
+                elif issubclass(option.type_obj, SchemaBasedObject):
+                    return 1
+                else:
+                    return 2
+
             def constructor(raw_value):
-                for option in sorted(type_options,
-                                     key=lambda option: 0 if issubclass(option.type_obj, SchemaBasedObject) else 1):
+                for option in sorted(type_options, key=options_sort_key):
                     if (
-                        issubclass(option.type_obj, SchemaBasedObject) and isinstance(raw_value, dict)
+                        isinstance(raw_value, dict)
+                        and (
+                            issubclass(option.type_obj, Reference) and '$ref' in raw_value
+                            or issubclass(option.type_obj, SchemaBasedObject)
+                        )
                         or isinstance(raw_value, option.type_obj)
                     ):
                         try:
@@ -385,14 +391,7 @@ class ArrayTypeInfoFactory(SchemaBasedTypeInfoFactory):
                 if not isinstance(raw_list, list):
                     raise ValueError(f'while converting a list of raw items to a list of typed items,'
                                      f'expected a list of items, got a {str(type(raw_list))}: {str(raw_list)}')
-                new_list = []
-                for raw in raw_list:
-                    if isinstance(raw, dict) and '$ref' in raw:
-                        new_list.append(Reference(raw['$ref'], type_info=sub_type))
-                    else:
-                        new_list.append(sub_type.constructor(raw))
-
-                return SchemaBasedList(new_list)  # [sub_type.constructor(x) for x in raw_list]
+                return [sub_type.constructor(x) for x in raw_list]
 
             return SchemaBasedTypeInfo(type_str=f'List[{sub_type.type_str}]',
                                        type_obj=list,
@@ -487,6 +486,7 @@ class SchemaBasedTypeBuilder(object):
         self.specification_interface = specification_type_to_interface_class[specification_type](self.specification)
         self._type_info_factories: List[Type[SchemaBasedTypeInfoFactory]] = [
             RefTypeInfoFactory,
+            ReferenceSchemaTypeInfoFactory,
             CustomTypeInfoFactory,
             OneOfTypeInfoFactory,
             ArrayTypeInfoFactory,
@@ -544,7 +544,15 @@ def gen_stub_text(specification_path: str, specification_type: str):
                 '    def __init__(self, properties: Dict[str, Any]) -> None: ...\n' \
                 '    def as_simple_dict(self) -> Dict[str, Any]: ...\n' \
                 '    def get_all_properties(self) -> Dict[str, Any]: ...\n' \
-                '    def get_additional_properties(self) -> Dict[str, Any]: ...\n\n'
+                '    def get_additional_properties(self) -> Dict[str, Any]: ...\n\n' \
+                'class Reference(object):\n' \
+                '    def __init__(self, ref_str: str): ...\n' \
+                '    def resolve(self) -> Any: ...\n' \
+                '    def __getitem__(self, item): ...\n' \
+                '    def __getattr__(self, item): ...\n' \
+                '    def __iter__(self): ...\n' \
+                '    def __contains__(self, item) -> bool: ...\n\n'
+
     for type_name, dynamic_type_class in sorted(SchemaBasedTypeBuilder(specification_path,
                                                                        specification_type).get_all_types().items()):
         if isinstance(dynamic_type_class, type) and issubclass(dynamic_type_class, SchemaBasedObject):

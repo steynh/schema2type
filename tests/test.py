@@ -25,7 +25,7 @@ from click.testing import CliRunner
 import schema2type.commands
 from schema2type import Reference
 from schema2type.commands.gen_stubs import get_relative_path
-from examples.generated_files.openapi import RootObject as OpenAPISpecification, Schema
+from examples.generated_files.openapi import RootObject as OpenAPISpecification, Schema, Components
 
 root_dir = Path(__file__).parent.parent
 
@@ -105,6 +105,20 @@ class IntegrationTestCase(unittest.TestCase):
 
 
 class ReferencesTestCase(unittest.TestCase):
+    def test_references_simple(self):
+        components_yaml = '\n'.join([
+            'schemas:',
+            '   Schema1:',
+            '       type: object',
+            '       properties:',
+            '           prop:',
+            '               $ref: "#/schemas/Schema2"',
+            '   Schema2:',
+            '       type: integer'
+        ])
+        components = Components(**yaml.safe_load(components_yaml))
+        self.assertIsInstance(components.schemas['Schema1'].properties['prop'], Reference)
+
     def test_references(self):
         with open(root_dir.joinpath('examples/pet_store_openapi_spec.yml')) as oas_file:
             pet_store = OpenAPISpecification(**yaml.safe_load(oas_file))
@@ -113,7 +127,8 @@ class ReferencesTestCase(unittest.TestCase):
         self.assertIsInstance(pet_schema_by_ref.resolve(), Schema)
         self.assertNotIn('$ref', pet_schema_by_ref)
         pet_schema_by_list_ref = pet_store.paths['/pet']['put'].requestBody.content['application/json'].schema.oneOf[0]
-        self.assertIsInstance(pet_schema_by_list_ref, Schema)
+        self.assertIsInstance(pet_schema_by_list_ref, Reference)
+        self.assertIsInstance(pet_schema_by_list_ref.resolve(), Schema)
         # todo: same should be true for references taken from Dict
 
 
