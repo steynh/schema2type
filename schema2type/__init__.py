@@ -539,19 +539,8 @@ class SchemaBasedTypeBuilder(object):
 # noinspection PyProtectedMember
 def gen_stub_text(specification_path: str, specification_type: str):
     stub_text = 'from __future__ import annotations\n' \
-                'from typing import Any, Dict, List, Optional, Union\n\n' \
-                'class SchemaBasedObject(object):\n' \
-                '    def __init__(self, properties: Dict[str, Any]) -> None: ...\n' \
-                '    def as_simple_dict(self) -> Dict[str, Any]: ...\n' \
-                '    def get_all_properties(self) -> Dict[str, Any]: ...\n' \
-                '    def get_additional_properties(self) -> Dict[str, Any]: ...\n\n' \
-                'class Reference(object):\n' \
-                '    def __init__(self, ref_str: str): ...\n' \
-                '    def resolve(self) -> Any: ...\n' \
-                '    def __getitem__(self, item): ...\n' \
-                '    def __getattr__(self, item): ...\n' \
-                '    def __iter__(self): ...\n' \
-                '    def __contains__(self, item) -> bool: ...\n\n'
+                'from typing import Any, Dict, List, Optional, Union\n' \
+                'from schema2type import SchemaBasedObject, Reference\n\n'
 
     for type_name, dynamic_type_class in sorted(SchemaBasedTypeBuilder(specification_path,
                                                                        specification_type).get_all_types().items()):
@@ -592,7 +581,8 @@ def gen_stub_text(specification_path: str, specification_type: str):
 
 def gen_module_text(relative_specification_path: str, specification_type: str):
     return f"from pathlib import Path\n\n"\
-           f"import schema2type\n\n"\
+           f"import schema2type\n"\
+           f"from schema2type import SchemaBasedObject, Reference\n\n" \
            f"globals().update(schema2type.SchemaBasedTypeBuilder(\n"\
            f"    Path(__file__).parent.joinpath('{relative_specification_path}'),\n"\
            f"    '{specification_type}',\n"\
