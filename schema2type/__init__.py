@@ -60,7 +60,9 @@ class SchemaBasedObject(object):
             if property_name in self._legal_property_name_to_original:
                 property_name = self._legal_property_name_to_original[property_name]
 
-            if property_name in self._property_name_to_type:
+            if property_value is None:
+                pass  # do nothing
+            elif property_name in self._property_name_to_type:
                 constructor = self._property_name_to_type[property_name].constructor
                 self._properties[property_name] = constructor(property_value)
             elif self._additional_properties_allowed:
